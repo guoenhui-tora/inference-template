@@ -30,7 +30,7 @@
 
 ## 脚本关系
 
-```txt
+```
 宿主机
   sbatch -> slurm.sh -> srun --> +-----------+
                                  | docker.sh |
