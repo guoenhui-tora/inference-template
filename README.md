@@ -1,6 +1,6 @@
 # 推理实验模板
 
-复制到新项目后使用。启动脚本按实验改，所有部署共用 `scripts/bench.sh`。
+复制到新项目后使用，以 vLLM 为主，SGLang 按需选用。启动脚本按实验改，所有部署共用 `scripts/bench.sh`。
 
 实验进度、关键结果和下一步保存在项目文件中，不依赖对话历史；新会话从索引和 run 记录接着做。
 
@@ -13,7 +13,8 @@
 ├── docs/                  研究说明、文档索引与分析
 ├── protocols/benchmark.md 公共压测协议
 ├── scripts/
-│   ├── serve.sh           服务启动模板
+│   ├── serve-vllm.sh      vLLM 服务启动模板
+│   ├── serve-sglang.sh    SGLang 服务启动模板（可选）
 │   ├── docker.sh          容器与运行编排模板
 │   ├── slurm.sh           资源申请模板
 │   ├── bench.sh           公共压测入口
@@ -42,7 +43,7 @@
                服务容器 (GPU)                       压测容器 (CPU)
                  serve.sh                            bench.sh
                      |                                   |
-                vllm serve <------- HTTP ------- vllm bench serve
+              vLLM / SGLang <------ HTTP ------- vllm bench serve
 ```
 
 两种入口二选一，共用同一个 `docker.sh`：
@@ -50,7 +51,7 @@
 - 使用 Slurm：`sbatch` 提交 `slurm.sh`，分配资源后在计算节点通过 `srun` 调用 `docker.sh`。
 - 不使用 Slurm：在已有可用资源的宿主机直接执行 `bash docker.sh`。
 
-`docker.sh` 负责启动容器、等待服务就绪、执行压测和清理。`serve.sh`、`bench.sh` 在各自容器中直接调用原生 vLLM 命令，只负责模型服务和 HTTP 压测。
+`docker.sh` 负责启动容器、等待服务就绪、执行压测和清理。run 内的 `serve.sh` 调用所选服务引擎；公共 `bench.sh` 统一使用 vLLM 压测客户端，通过 OpenAI 兼容 HTTP 接口测量 vLLM 或 SGLang 服务。
 
 ## 运行实验
 
@@ -60,16 +61,16 @@
 
 ```bash
 exp_name=baseline  # 本次实验名
-run_dir=$(bash scripts/new-run.sh "$exp_name")
+run_dir=$(bash scripts/new-run.sh "$exp_name" --engine vllm)  # vLLM 为默认值，可省略该选项
 ```
 
-每个 run 自带 README，保存当次实验记录。
+使用 SGLang 时改为 `--engine sglang`。所选服务模板复制到 run 后统一命名为 `serve.sh`；每个 run 自带 README，保存当次实验记录。
 
 ### serve.sh
 
 在此修改模型路径、TP、引擎参数和补丁，按模型关闭 thinking。
 
-Decode-only 模拟（[vLLM 官方方法](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment/#benchmarking_1)）：
+vLLM 专用的 Decode-only 模拟（[官方方法](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment/#benchmarking_1)）：
 
 ```bash
 # serve.sh：追加到 vllm serve，用合成 KV 测量 decode
@@ -78,9 +79,9 @@ Decode-only 模拟（[vLLM 官方方法](https://docs.vllm.ai/en/latest/serving/
 
 ### docker.sh
 
-填写镜像、设备、挂载和 CPU/内存绑定。端口和服务名供 serve 与 bench 共用。
+填写镜像、设备、挂载和 CPU/内存绑定。`IMAGE` 是服务镜像，`BENCH_IMAGE` 是含 vLLM 压测客户端的压测镜像；省略后者时共用 `IMAGE`。端口和服务名供 serve 与 bench 共用。
 
-`home/.cache/` 通过 Docker 挂载到容器内的 `/workspace/cache/`，复用编译缓存，缩短 vLLM 启动时间。参考[缓存设计](https://docs.vllm.ai/en/latest/design/torch_compile/#compilation-cache)。
+`home/.cache/` 通过 Docker 挂载到容器内的 `/workspace/cache/`，复用编译缓存，缩短 vLLM 启动时间。参考 [vLLM 官方缓存设计](https://docs.vllm.ai/en/latest/design/torch_compile/#compilation-cache)。
 
 在 `bench_args` 中修改压测参数。对应的命令示例：
 

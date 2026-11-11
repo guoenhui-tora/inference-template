@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 复制到 run 后修改这里的具体引擎命令；以下参数仅为 vLLM 示例。
+# 复制为 run 内的 serve.sh，再修改本次 vLLM 命令。
 set -euo pipefail
 export TZ=Asia/Shanghai
 run_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
